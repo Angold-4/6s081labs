@@ -13,6 +13,7 @@ void sieveProc(int left[2]) {
     int prime, temp, pid, right[2];
 
     // if doesn't read a single number from left, then exit
+    // final termination condition
     if( read(left[READ], &prime, sizeof(int)) == 0 ) {
         close(left[READ]);
         exit(0);
@@ -21,6 +22,7 @@ void sieveProc(int left[2]) {
     printf("prime %d\n", prime);
     pipe(right);
     if( (pid = fork()) < 0 ) {
+	// exit
         fprintf(stderr, "fork error...\n");
         close(right[READ]);
         close(right[WRITE]);
@@ -57,6 +59,7 @@ int main(int argc, char *argv[]) {
         wait(0);
         exit(0);
     } else {
+	// child process
         sieveProc(p);
         exit(0);
     }
