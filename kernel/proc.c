@@ -655,3 +655,18 @@ procdump(void)
     printf("\n");
   }
 }
+
+
+// collect the number of processes
+uint64
+unusedproc(void) {
+  struct proc* p;
+  uint64 used = 0;
+
+  for (p = proc; p < &proc[NPROC]; p++) {
+      if (p->state != UNUSED) {
+	  used++;
+      }
+  }
+  return used;
+}
