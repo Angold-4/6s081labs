@@ -14,11 +14,14 @@ main(int argc, char *argv[])
     exit(1);
   }
 
+  // execute trace
+  // just set the mask
   if (trace(atoi(argv[1])) < 0) {
     fprintf(2, "%s: trace failed\n", argv[0]);
     exit(1);
   }
   
+  // new execution
   for(i = 2; i < argc && i < MAXARG; i++){
     nargv[i-2] = argv[i];
   }

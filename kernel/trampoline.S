@@ -98,7 +98,7 @@ userret:
 
         # put the saved user a0 in sscratch, so we
         # can swap it with our a0 (TRAPFRAME) in the last step.
-        ld t0, 112(a0)
+        ld t0, 112(a0) // t0 is the return value
         csrw sscratch, t0
 
         # restore all but a0 from TRAPFRAME
@@ -116,7 +116,7 @@ userret:
         ld a3, 136(a0)
         ld a4, 144(a0)
         ld a5, 152(a0)
-        ld a6, 160(a0)
+	ld a6, 160(a0)
         ld a7, 168(a0)
         ld s2, 176(a0)
         ld s3, 184(a0)

@@ -273,7 +273,7 @@ int
 fork(void)
 {
   int i, pid;
-  struct proc *np;
+  struct proc *np; // new process
   struct proc *p = myproc();
 
   // Allocate process.
@@ -309,6 +309,7 @@ fork(void)
 
   acquire(&wait_lock);
   np->parent = p;
+  np->mask = p->mask;
   release(&wait_lock);
 
   acquire(&np->lock);
