@@ -135,6 +135,9 @@ found:
     return 0;
   }
 
+  // copy the kernel partion mapping
+  p->kpagetable = kvmcreate(); // part 2 solution
+
   // Set up new context to start executing at forkret,
   // which returns to user space.
   memset(&p->context, 0, sizeof(p->context));
@@ -153,6 +156,11 @@ freeproc(struct proc *p)
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
+
+  if (p->kpagetable)
+      kvmfree(p->kpagetable, p->sz);
+  p->kpagetable = 0;
+
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
@@ -244,6 +252,8 @@ userinit(void)
 
   p->state = RUNNABLE;
 
+  kvmmapuser(p->pid, p->kpagetable, p->pagetable, p->sz, 0);
+
   release(&p->lock);
 }
 
@@ -263,6 +273,7 @@ growproc(int n)
   } else if(n < 0){
     sz = uvmdealloc(p->pagetable, sz, sz + n);
   }
+  kvmmapuser(p->pid, p->kpagetable, p->pagetable, sz, p->sz);
   p->sz = sz;
   return 0;
 }
@@ -313,6 +324,9 @@ fork(void)
 
   acquire(&np->lock);
   np->state = RUNNABLE;
+
+  kvmmapuser(np->pid, np->kpagetable, np->pagetable, np->sz, 0);
+
   release(&np->lock);
 
   return pid;
@@ -453,11 +467,21 @@ scheduler(void)
         // before jumping back to us.
         p->state = RUNNING;
         c->proc = p;
+
+	// switch kernel page table
+        w_satp(MAKE_SATP(p->kpagetable)); // more direct mapping
+        sfence_vma();
+
+	// context switching
+        // save current registers in old. Load from new.	
         swtch(&c->context, &p->context);
 
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
+
+	// switch to scheduler's kernel page table
+        kvminithart();
       }
       release(&p->lock);
     }

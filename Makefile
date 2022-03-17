@@ -50,6 +50,10 @@ OBJS += \
 	$K/sprintf.o
 endif
 
+ifeq ($(LAB),pgtbl)
+OBJS += \
+	$K/vmcopyin.o
+endif
 
 ifeq ($(LAB),net)
 OBJS += \

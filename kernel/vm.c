@@ -130,6 +130,31 @@ kvmmap(pagetable_t kpgtbl, uint64 va, uint64 pa, uint64 sz, int perm)
     panic("kvmmap");
 }
 
+
+
+// Lab pgtbl part 3
+// Copy PTEs from the user page table into this proc's kernel page table
+void
+kvmmapuser(int pid, pagetable_t kpagetable, pagetable_t upagetable, uint64 newsz, uint64 oldsz) {
+    uint64 va;
+    pte_t *upte;
+    pte_t *kpte;
+
+    if (newsz >= PLIC) {
+	panic("kvmmapuser: newsz too large");
+    }
+
+    for (va = oldsz; va < newsz; va += PGSIZE) {
+	upte = walk(upagetable, va, 0);
+	kpte = walk(kpagetable, va, 1); // if empty, create it
+	*kpte = *upte;
+	// because the user mapping in kernel page table is only used for copyin 
+	// so the kernel don't need to have the W,X,U bit turned on
+	*kpte &= ~(PTE_U|PTE_W|PTE_X);
+    }
+}
+
+
 // Create PTEs for virtual addresses starting at va that refer to
 // physical addresses starting at pa. va and size might not
 // be page-aligned. Returns 0 on success, -1 if walk() couldn't
@@ -198,6 +223,67 @@ uvmcreate()
   memset(pagetable, 0, PGSIZE);
   return pagetable;
 }
+
+
+// Solution for pgtbl part 2
+
+// The goal of this section and the next is to allow the kernel to directly dereference user pointers.
+
+// helper function
+void
+kvmmaphelper(pagetable_t pagetable, uint64 va, uint64 pa, uint64 sz, int perm) {
+    if (mappages(pagetable, va, sz, pa, perm) != 0)
+	panic("kvmmaphelper");
+}
+
+// kvmmap is only used for the kernel page table, kvmcreate() is used for mapping page for
+// each user-processes' kernel page table mapping
+pagetable_t
+kvmcreate() {
+    pagetable_t pagetable;
+    int i;
+    
+    pagetable = uvmcreate(); // create an empty page table
+    for (i = 1; i < 512; i++) {
+	pagetable[i] = kernel_pagetable[i]; // global kernel_pagetable, in data (kvmmake())
+    }
+
+  // uart registers
+  kvmmaphelper(pagetable, UART0, UART0, PGSIZE, PTE_R | PTE_W);
+
+  // virtio mmio disk interface
+  kvmmaphelper(pagetable, VIRTIO0, VIRTIO0, PGSIZE, PTE_R | PTE_W);
+
+  // CLINT
+  kvmmaphelper(pagetable, CLINT, CLINT, 0x10000, PTE_R | PTE_W);
+
+  // PLIC
+  kvmmaphelper(pagetable, PLIC, PLIC, 0x400000, PTE_R | PTE_W);
+
+  return pagetable;
+}
+
+
+// Free the page of physical memory pointed at by v (kvmfree)
+
+void
+kvmfree(pagetable_t kpagetable, uint64 sz) {
+    pte_t pte = kpagetable[0];
+    pagetable_t level1 = (pagetable_t) PTE2PA(pte);
+    for (int i = 0; i < 512; i++) {
+	pte_t pte = level1[i];
+	if (pte & PTE_V) {
+	    // valid
+	    uint64 level2 = PTE2PA(pte);
+	    kfree((void *) level2);
+	    level1[i] = 0; // 0 -> no entry
+	    // without also freeing the leaf physical memory pages.
+	}
+    }
+    kfree((void *) level1);
+    kfree((void *) kpagetable);
+}
+
 
 // Load the user initcode into address 0 of pagetable,
 // for the very first process.
@@ -371,11 +457,14 @@ copyout(pagetable_t pagetable, uint64 dstva, char *src, uint64 len)
 int
 copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 {
+    // spetialized for user kernel pgtbl
+    return copyin_new(pagetable, dst, srcva, len);
+/*
   uint64 n, va0, pa0;
 
   while(len > 0){
     va0 = PGROUNDDOWN(srcva);
-    pa0 = walkaddr(pagetable, va0);
+    pa0 = walkaddr(pagetable, va0); // return the physical address
     if(pa0 == 0)
       return -1;
     n = PGSIZE - (srcva - va0);
@@ -383,11 +472,13 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
       n = len;
     memmove(dst, (void *)(pa0 + (srcva - va0)), n);
 
+    // copy one page per time
     len -= n;
     dst += n;
     srcva = va0 + PGSIZE;
   }
   return 0;
+*/
 }
 
 // Copy a null-terminated string from user to kernel.
@@ -397,6 +488,8 @@ copyin(pagetable_t pagetable, char *dst, uint64 srcva, uint64 len)
 int
 copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
 {
+    return copyinstr_new(pagetable, dst, srcva, max);
+/*
   uint64 n, va0, pa0;
   int got_null = 0;
 
@@ -431,6 +524,7 @@ copyinstr(pagetable_t pagetable, char *dst, uint64 srcva, uint64 max)
   } else {
     return -1;
   }
+*/
 }
 
 
