@@ -244,9 +244,12 @@ kvmcreate() {
     int i;
     
     pagetable = uvmcreate(); // create an empty page table
+    // copy the	kernel page table
     for (i = 1; i < 512; i++) {
 	pagetable[i] = kernel_pagetable[i]; // global kernel_pagetable, in data (kvmmake())
     }
+    // notice that there is no zero entry 
+    // Also mapping the devices that live in the zero entry
 
   // uart registers
   kvmmaphelper(pagetable, UART0, UART0, PGSIZE, PTE_R | PTE_W);
