@@ -101,7 +101,7 @@ uartputc(int c)
     } else {
       uart_tx_buf[uart_tx_w % UART_TX_BUF_SIZE] = c;
       uart_tx_w += 1;
-      uartstart();
+      uartstart(); // kick the hardware device
       release(&uart_tx_lock);
       return;
     }
