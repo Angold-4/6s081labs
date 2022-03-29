@@ -476,6 +476,9 @@ scheduler(void)
         // save current registers in old. Load from new.	
         swtch(&c->context, &p->context);
 
+
+	// yield, sleep, exit -> return since here
+
         // Process is done running for now.
         // It should have changed its p->state before coming back.
         c->proc = 0;
