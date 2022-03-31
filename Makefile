@@ -193,6 +193,7 @@ UPROGS=\
 	$U/_wc\
 	$U/_zombie\
 	$U/_spin\
+	$U/_usertest\
 
 
 
