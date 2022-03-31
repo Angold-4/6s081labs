@@ -46,9 +46,25 @@ sys_sbrk(void)
 
   if(argint(0, &n) < 0)
     return -1;
-  addr = myproc()->sz;
+
+  struct proc* p = myproc();
+  addr = p->sz; // size of process memory (bytes) uint64
+
+  if (n < 0) {
+      // deallocate
+      uint sz;
+      sz = p->sz;
+      p->sz = uvmdealloc(p->pagetable, sz, sz + n);
+  } else {
+      // Lazy Allocate
+      p->sz += n;
+  }
+
+  /*
   if(growproc(n) < 0)
     return -1;
+  */
+
   return addr;
 }
 

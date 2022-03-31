@@ -84,9 +84,10 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
     panic("walk");
 
   for(int level = 2; level > 0; level--) {
-    pte_t *pte = &pagetable[PX(level, va)];
+      // pagetable -> pointer
+    pte_t *pte = &pagetable[PX(level, va)]; // 4096 bytes / 2^9  = 64 bits (a pte)
     if(*pte & PTE_V) {
-      pagetable = (pagetable_t)PTE2PA(*pte);
+      pagetable = (pagetable_t)PTE2PA(*pte); // next pgtbl's begin address
     } else {
       if(!alloc || (pagetable = (pde_t*)kalloc()) == 0)
         return 0;
@@ -94,7 +95,7 @@ walk(pagetable_t pagetable, uint64 va, int alloc)
       *pte = PA2PTE(pagetable) | PTE_V;
     }
   }
-  return &pagetable[PX(0, va)];
+  return &pagetable[PX(0, va)]; // only need 9 bits to get a valid pte (64bits)
 }
 
 // Look up a virtual address, return the physical address,
@@ -143,14 +144,15 @@ mappages(pagetable_t pagetable, uint64 va, uint64 size, uint64 pa, int perm)
   if(size == 0)
     panic("mappages: size");
   
-  a = PGROUNDDOWN(va);
+  a = PGROUNDDOWN(va); // 0000 in the last (begin a page)
   last = PGROUNDDOWN(va + size - 1);
   for(;;){
-    if((pte = walk(pagetable, a, 1)) == 0)
+    if((pte = walk(pagetable, a, 1)) == 0) // software walk get the last(0) level pte
       return -1;
-    if(*pte & PTE_V)
+    if(*pte & PTE_V) // last pte value
       panic("mappages: remap");
-    *pte = PA2PTE(pa) | perm | PTE_V;
+    // the pte is a pointer, points to the real physical address
+    *pte = PA2PTE(pa) | perm | PTE_V; // PTE
     if(a == last)
       break;
     a += PGSIZE;
@@ -172,10 +174,13 @@ uvmunmap(pagetable_t pagetable, uint64 va, uint64 npages, int do_free)
     panic("uvmunmap: not aligned");
 
   for(a = va; a < va + npages*PGSIZE; a += PGSIZE){
-    if((pte = walk(pagetable, a, 0)) == 0)
-      panic("uvmunmap: walk");
-    if((*pte & PTE_V) == 0)
-      panic("uvmunmap: not mapped");
+    if((pte = walk(pagetable, a, 0)) == 0) {
+	continue;
+    }
+    if((*pte & PTE_V) == 0) {
+	continue;
+    }
+
     if(PTE_FLAGS(*pte) == PTE_V)
       panic("uvmunmap: not a leaf");
     if(do_free){
@@ -228,6 +233,7 @@ uvmalloc(pagetable_t pagetable, uint64 oldsz, uint64 newsz)
 
   oldsz = PGROUNDUP(oldsz);
   for(a = oldsz; a < newsz; a += PGSIZE){
+    // allocate page by page
     mem = kalloc();
     if(mem == 0){
       uvmdealloc(pagetable, a, oldsz);
@@ -307,9 +313,9 @@ uvmcopy(pagetable_t old, pagetable_t new, uint64 sz)
 
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walk(old, i, 0)) == 0)
-      panic("uvmcopy: pte should exist");
+	continue;
     if((*pte & PTE_V) == 0)
-      panic("uvmcopy: page not present");
+	continue;
     pa = PTE2PA(*pte);
     flags = PTE_FLAGS(*pte);
     if((mem = kalloc()) == 0)

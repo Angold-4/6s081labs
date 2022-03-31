@@ -27,7 +27,7 @@ void
 kinit()
 {
   initlock(&kmem.lock, "kmem");
-  freerange(end, (void*)PHYSTOP);
+  freerange(end, (void*)PHYSTOP); // 134 MB
 }
 
 void
@@ -54,9 +54,10 @@ kfree(void *pa)
   // Fill with junk to catch dangling refs.
   memset(pa, 1, PGSIZE);
 
-  r = (struct run*)pa;
+  r = (struct run*)pa; // physical address
 
   acquire(&kmem.lock);
+  // append to the linked list 
   r->next = kmem.freelist;
   kmem.freelist = r;
   release(&kmem.lock);
@@ -71,7 +72,7 @@ kalloc(void)
   struct run *r;
 
   acquire(&kmem.lock);
-  r = kmem.freelist;
+  r = kmem.freelist; // allocate from high to low
   if(r)
     kmem.freelist = r->next;
   release(&kmem.lock);

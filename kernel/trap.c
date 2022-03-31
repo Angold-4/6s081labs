@@ -67,9 +67,32 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+  } else if (r_scause() == 13 || r_scause() == 15) {  // page fault
+      uint64 va = r_stval(); // r_stval() returns the RISC-V stval register.
+      // which contains the virtual address of corresponding page fault.
+
+      if (va >= p->sz || va < p->trapframe->sp) {
+	  // 1. must call sbrk() allocate before.
+	  // 2. in xv6, heap is higher than stack.
+	  p->killed = 1;
+      } else {
+	  // Lazy allocate a page
+	  uint64 ka = (uint64) kalloc(); // free list -> one page (4096 bytes) pa
+	  if (ka == 0) {
+	      p->killed = 1;
+	  } else {
+	      memset((void*)ka, 0, PGSIZE);
+	      va = PGROUNDDOWN(va);
+	      if (mappages(p->pagetable, va, PGSIZE, ka, PTE_W|PTE_R|PTE_U) != 0) {
+		  kfree((void *) ka);
+		  p->killed = 1;
+	      }
+	  }
+      }
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
+    printf("reason: scause %d\n", r_scause());
     p->killed = 1;
   }
 
