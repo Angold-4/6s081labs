@@ -79,6 +79,7 @@ usertrap(void)
 	  // Lazy allocate a page
 	  uint64 ka = (uint64) kalloc(); // free list -> one page (4096 bytes) pa
 	  if (ka == 0) {
+	      printf("cannot allocate %d\n", p->pid);
 	      p->killed = 1;
 	  } else {
 	      memset((void*)ka, 0, PGSIZE);
