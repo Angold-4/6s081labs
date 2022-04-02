@@ -452,6 +452,7 @@ scheduler(void)
 
     for(p = proc; p < &proc[NPROC]; p++) {
       acquire(&p->lock);
+
       if(p->state == RUNNABLE) {
         // Switch to chosen process.  It is the process's job
         // to release its lock and then reacquire it
@@ -464,6 +465,7 @@ scheduler(void)
         // It should have changed its p->state before coming back.
         c->proc = 0;
       }
+
       release(&p->lock);
     }
   }
@@ -484,7 +486,7 @@ sched(void)
 
   if(!holding(&p->lock))
     panic("sched p->lock");
-  if(mycpu()->noff != 1)
+  if(mycpu()->noff != 1) // check number of locks (only p->locks is allowed)
     panic("sched locks");
   if(p->state == RUNNING)
     panic("sched running");

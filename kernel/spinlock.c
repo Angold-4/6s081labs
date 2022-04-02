@@ -28,7 +28,7 @@ acquire(struct spinlock *lk)
   // On RISC-V, sync_lock_test_and_set turns into an atomic swap:
   //   a5 = 1
   //   s1 = &lk->locked
-  //   amoswap.w.aq a5, a5, (s1)
+  //   amoswap.w.aq a5, a5, (s1) // atomic instruction
   while(__sync_lock_test_and_set(&lk->locked, 1) != 0)
     ;
 
@@ -93,7 +93,7 @@ push_off(void)
   intr_off();
   if(mycpu()->noff == 0)
     mycpu()->intena = old;
-  mycpu()->noff += 1;
+  mycpu()->noff += 1; // number of holding locks
 }
 
 void
