@@ -10,14 +10,40 @@
 #define STACK_SIZE  8192
 #define MAX_THREAD  4
 
+// =============== uthread ================
+struct uthread_context {
+    uint64 ra;
+    uint64 sp;
+
+    // callee-saved registers
+    uint64 s0;
+    uint64 s1;
+    uint64 s2;
+    uint64 s3;
+    uint64 s4;
+    uint64 s5;
+    uint64 s6;
+    uint64 s7;
+    uint64 s8;
+    uint64 s9;
+    uint64 s10;
+    uint64 s11;
+};
+
 
 struct thread {
   char       stack[STACK_SIZE]; /* the thread's stack */
   int        state;             /* FREE, RUNNING, RUNNABLE */
+  struct uthread_context        context;
 };
+
 struct thread all_thread[MAX_THREAD];
 struct thread *current_thread;
-extern void thread_switch(uint64, uint64);
+
+
+extern void thread_switch(uint64, uint64); 
+// thread_switch(uthread_context* t, uthread_context* next_thread)
+
               
 void 
 thread_init(void)
@@ -38,10 +64,10 @@ thread_schedule(void)
 
   /* Find another runnable thread. */
   next_thread = 0;
-  t = current_thread + 1;
+  t = current_thread + 1; // next thread
   for(int i = 0; i < MAX_THREAD; i++){
     if(t >= all_thread + MAX_THREAD)
-      t = all_thread;
+      t = all_thread; // back to begin 
     if(t->state == RUNNABLE) {
       next_thread = t;
       break;
@@ -58,6 +84,10 @@ thread_schedule(void)
     next_thread->state = RUNNING;
     t = current_thread;
     current_thread = next_thread;
+
+    // like swtch
+    thread_switch((uint64)&t->context, (uint64)&next_thread->context);
+
     /* YOUR CODE HERE
      * Invoke thread_switch to switch from t to next_thread:
      * thread_switch(??, ??);
@@ -68,6 +98,7 @@ thread_schedule(void)
 
 void 
 thread_create(void (*func)())
+// assign a thread into thread slots
 {
   struct thread *t;
 
@@ -75,7 +106,9 @@ thread_create(void (*func)())
     if (t->state == FREE) break;
   }
   t->state = RUNNABLE;
-  // YOUR CODE HERE
+
+  t->context.ra = (uint64) func;
+  t->context.sp = (uint64) (t->stack + STACK_SIZE); // stack top b->s
 }
 
 void 
@@ -154,9 +187,11 @@ main(int argc, char *argv[])
   a_started = b_started = c_started = 0;
   a_n = b_n = c_n = 0;
   thread_init();
+
   thread_create(thread_a);
   thread_create(thread_b);
   thread_create(thread_c);
+
   thread_schedule();
   exit(0);
 }

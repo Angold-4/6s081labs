@@ -108,6 +108,7 @@ consoleread(int user_dst, uint64 dst, int n)
     }
 
     // copy the input byte to the user-space buffer.
+    // byte-to-byte
     cbuf = c;
     if(either_copyout(user_dst, dst, &cbuf, 1) == -1)
       break;
@@ -165,9 +166,10 @@ consoleintr(int c)
       // store for consumption by consoleread().
       cons.buf[cons.e++ % INPUT_BUF] = c;
 
+      // only one byte !!!
       if(c == '\n' || c == C('D') || cons.e == cons.r+INPUT_BUF){
         // wake up consoleread() if a whole line (or end-of-file)
-        // has arrived.
+        // has arrived. (or full)
         cons.w = cons.e;
         wakeup(&cons.r);
       }

@@ -85,6 +85,8 @@ uartinit(void)
 // by write().
 void
 uartputc(int c)
+    // write a char
+    // THR -> RHR + interrupt
 {
   acquire(&uart_tx_lock);
 
@@ -136,6 +138,7 @@ uartputc_sync(int c)
 // called from both the top- and bottom-half.
 void
 uartstart()
+// kick the uart
 {
   while(1){
     if(uart_tx_w == uart_tx_r){
@@ -181,14 +184,18 @@ uartintr(void)
 {
   // read and process incoming characters.
   while(1){
+    // input
     int c = uartgetc();
     if(c == -1)
       break;
+
+    // finish sending a byte
     consoleintr(c);
   }
 
   // send buffered characters.
   acquire(&uart_tx_lock);
+  // output
   uartstart();
   release(&uart_tx_lock);
 }
