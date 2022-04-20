@@ -63,6 +63,13 @@ bget(uint dev, uint blockno)
   acquire(&bcache.lock);
 
   // Is the block already cached?
+  // A small trick here: (Originated in Unix)
+  //
+  // For the buffer cache scan: since we want to
+  // achieve the best locality, we want the linked list
+  // order by how recently the buffer were used
+  // which will reduce the scanning time
+  // (forward scan)
   for(b = bcache.head.next; b != &bcache.head; b = b->next){
     if(b->dev == dev && b->blockno == blockno){
       b->refcnt++;
@@ -73,9 +80,16 @@ bget(uint dev, uint blockno)
   }
 
   // Not cached.
+  // scans the buffer list for the second time
   // Recycle the least recently used (LRU) unused buffer.
+  //
+  // For the buffer cache scan: since we want to
+  // achieve the best locality, and this backward scan will
+  // reduce the scanning time
   for(b = bcache.head.prev; b != &bcache.head; b = b->prev){
-    if(b->refcnt == 0) {
+    if(b->refcnt == 0) { 
+      // non-zero b->refcnt prevents the buffer from being re-used
+      // for a different disk block
       b->dev = dev;
       b->blockno = blockno;
       b->valid = 0;
@@ -85,6 +99,9 @@ bget(uint dev, uint blockno)
       return b;
     }
   }
+  // not a very graceful solution
+  // if all the buffers are busy, then too many processes are simulataneously
+  // executing file system calls, bget will panics
   panic("bget: no buffers");
 }
 
@@ -96,7 +113,7 @@ bread(uint dev, uint blockno)
 
   b = bget(dev, blockno);
   if(!b->valid) {
-    virtio_disk_rw(b, 0);
+    virtio_disk_rw(b, 0); // read
     b->valid = 1;
   }
   return b;
@@ -108,7 +125,8 @@ bwrite(struct buf *b)
 {
   if(!holdingsleep(&b->lock))
     panic("bwrite");
-  virtio_disk_rw(b, 1);
+  virtio_disk_rw(b, 1); // write
+  // virtio_disk_rw (1): write the modified ram buffer into disk
 }
 
 // Release a locked buffer.
@@ -125,6 +143,9 @@ brelse(struct buf *b)
   b->refcnt--;
   if (b->refcnt == 0) {
     // no one is waiting for it.
+    // Move the buffer to the front of the linked list
+    // cause the list to be ordered by how recently the
+    // bufferes were used
     b->next->prev = b->prev;
     b->prev->next = b->next;
     b->next = bcache.head.next;
