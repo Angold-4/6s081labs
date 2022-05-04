@@ -160,8 +160,9 @@ filewrite(struct file *f, uint64 addr, int n)
       if(n1 > max)
         n1 = max;
 
-      begin_op();
+      begin_op(); // system call
       ilock(f->ip);
+      // split
       if ((r = writei(f->ip, 1, addr + i, f->off, n1)) > 0)
         f->off += r;
       iunlock(f->ip);

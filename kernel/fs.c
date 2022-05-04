@@ -498,10 +498,13 @@ writei(struct inode *ip, int user_src, uint64 src, uint off, uint n)
     bp = bread(ip->dev, bmap(ip, off/BSIZE));
     m = min(n - tot, BSIZE - off%BSIZE);
     if(either_copyin(bp->data + (off % BSIZE), user_src, src, m) == -1) {
+      // copy user / kernel space data into a free buffer section in the 
+      // kernel space, then pass the buffer pointer (bp) into log_write
       brelse(bp);
       break;
     }
-    log_write(bp);
+    // the log_write will 
+    log_write(bp); // only care one buffer (BSIZE)
     brelse(bp);
   }
 

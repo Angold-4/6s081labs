@@ -101,17 +101,17 @@ bget(uint dev, uint blockno)
   }
   // not a very graceful solution
   // if all the buffers are busy, then too many processes are simulataneously
-  // executing file system calls, bget will panics
+  // executing file system calls, and may exceeds the xv6 design limits
+  // bget will panics
   panic("bget: no buffers");
 }
-
 // Return a locked buf with the contents of the indicated block.
 struct buf*
 bread(uint dev, uint blockno)
 {
   struct buf *b;
 
-  b = bget(dev, blockno);
+  b = bget(dev, blockno); // get a free buffer
   if(!b->valid) {
     virtio_disk_rw(b, 0); // read
     b->valid = 1;
@@ -123,6 +123,7 @@ bread(uint dev, uint blockno)
 void
 bwrite(struct buf *b)
 {
+  // actual write stuff (to the disk)
   if(!holdingsleep(&b->lock))
     panic("bwrite");
   virtio_disk_rw(b, 1); // write

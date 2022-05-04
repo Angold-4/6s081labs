@@ -71,11 +71,15 @@ install_trans(int recovering)
   int tail;
 
   for (tail = 0; tail < log.lh.n; tail++) {
+    // #1. log disk -> memory
     struct buf *lbuf = bread(log.dev, log.start+tail+1); // read log block
     struct buf *dbuf = bread(log.dev, log.lh.block[tail]); // read dst
     memmove(dbuf->data, lbuf->data, BSIZE);  // copy block to dst
+    
+    // #2 memory -> disk (file system)
     bwrite(dbuf);  // write dst to disk
     if(recovering == 0)
+      // decreasing the refcnt
       bunpin(dbuf);
     brelse(lbuf);
     brelse(dbuf);
@@ -103,12 +107,15 @@ static void
 write_head(void)
 {
   struct buf *buf = bread(log.dev, log.start);
+  // pointer to the buf->data
   struct logheader *hb = (struct logheader *) (buf->data);
   int i;
   hb->n = log.lh.n;
   for (i = 0; i < log.lh.n; i++) {
     hb->block[i] = log.lh.block[i];
   }
+  // only one block (log head)
+  // for future commit install_trans
   bwrite(buf);
   brelse(buf);
 }
@@ -127,11 +134,15 @@ void
 begin_op(void)
 {
   acquire(&log.lock);
+  // disable interrupts
   while(1){
     if(log.committing){
+      // waits until the logging system is not currently committing
       sleep(&log, &log.lock);
     } else if(log.lh.n + (log.outstanding+1)*MAXOPBLOCKS > LOGSIZE){
       // this op might exhaust log space; wait for commit.
+      // the code conservatively assumes that each system call might write up to 
+      // MAXOPBLOCKS distinct blocks
       sleep(&log, &log.lock);
     } else {
       log.outstanding += 1;
@@ -153,6 +164,9 @@ end_op(void)
   if(log.committing)
     panic("log.committing");
   if(log.outstanding == 0){
+    // avoid embedded system calls
+    // make sure that a whole system call data
+    // will be committed at the same time.
     do_commit = 1;
     log.committing = 1;
   } else {
@@ -181,10 +195,12 @@ write_log(void)
   int tail;
 
   for (tail = 0; tail < log.lh.n; tail++) {
+    // copy each block modified in the transaction from the
+    // buffer cache to its slot in the log on the disk
     struct buf *to = bread(log.dev, log.start+tail+1); // log block
     struct buf *from = bread(log.dev, log.lh.block[tail]); // cache block
     memmove(to->data, from->data, BSIZE);
-    bwrite(to);  // write the log
+    bwrite(to);  // write the log into the disk
     brelse(from);
     brelse(to);
   }
@@ -223,13 +239,15 @@ log_write(struct buf *b)
     panic("log_write outside of trans");
 
   for (i = 0; i < log.lh.n; i++) {
-    if (log.lh.block[i] == b->blockno)   // log absorption
+    if (log.lh.block[i] == b->blockno)   // log absorbtion
       break;
   }
-  log.lh.block[i] = b->blockno;
+  log.lh.block[i] = b->blockno; // ?
   if (i == log.lh.n) {  // Add new block to log?
+    // we do not find that block in the current log
+    // increasing the reference count
     bpin(b);
-    log.lh.n++;
+    log.lh.n++; // increasing the log size
   }
   release(&log.lock);
 }
