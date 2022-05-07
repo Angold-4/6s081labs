@@ -46,6 +46,7 @@ struct log {
   int dev;
   struct logheader lh;
 };
+
 struct log log;
 
 static void recover_from_log(void);

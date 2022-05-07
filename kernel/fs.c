@@ -69,12 +69,13 @@ balloc(uint dev)
 
   bp = 0;
   for(b = 0; b < sb.size; b += BPB){
-    bp = bread(dev, BBLOCK(b, sb));
+    bp = bread(dev, BBLOCK(b, sb)); // current block
+    // considers every block
     for(bi = 0; bi < BPB && b + bi < sb.size; bi++){
       m = 1 << (bi % 8);
       if((bp->data[bi/8] & m) == 0){  // Is block free?
         bp->data[bi/8] |= m;  // Mark block in use.
-        log_write(bp);
+        log_write(bp); // write to log buffer
         brelse(bp);
         bzero(dev, b + bi);
         return b + bi;
@@ -495,7 +496,7 @@ writei(struct inode *ip, int user_src, uint64 src, uint off, uint n)
     return -1;
 
   for(tot=0; tot<n; tot+=m, off+=m, src+=m){
-    bp = bread(ip->dev, bmap(ip, off/BSIZE));
+    bp = bread(ip->dev, bmap(ip, off/BSIZE)); // will call balloc
     m = min(n - tot, BSIZE - off%BSIZE);
     if(either_copyin(bp->data + (off % BSIZE), user_src, src, m) == -1) {
       // copy user / kernel space data into a free buffer section in the 
