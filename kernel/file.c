@@ -160,6 +160,7 @@ filewrite(struct file *f, uint64 addr, int n)
       if(n1 > max)
         n1 = max;
 
+      // log 
       begin_op(); // system call
       ilock(f->ip);
       // split

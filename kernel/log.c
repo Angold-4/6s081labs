@@ -74,6 +74,7 @@ install_trans(int recovering)
   for (tail = 0; tail < log.lh.n; tail++) {
     // #1. log disk -> memory
     struct buf *lbuf = bread(log.dev, log.start+tail+1); // read log block
+    // in write_log, we already store the log in the disk
     struct buf *dbuf = bread(log.dev, log.lh.block[tail]); // read dst
     memmove(dbuf->data, lbuf->data, BSIZE);  // copy block to dst
     
@@ -88,6 +89,7 @@ install_trans(int recovering)
 }
 
 // Read the log header from disk into the in-memory log header
+// use after write_head (write the log->lh into disk)
 static void
 read_head(void)
 {
@@ -201,7 +203,7 @@ write_log(void)
     struct buf *to = bread(log.dev, log.start+tail+1); // log block
     struct buf *from = bread(log.dev, log.lh.block[tail]); // cache block
     memmove(to->data, from->data, BSIZE);
-    bwrite(to);  // write the log into the disk
+    bwrite(to);    // write the log into the disk => for the recovery
     brelse(from);
     brelse(to);
   }
@@ -211,7 +213,7 @@ static void
 commit()
 {
   if (log.lh.n > 0) {
-    write_log();     // Write modified blocks from cache to log
+    write_log();     // Write modified blocks from cache to log (recovery)
     write_head();    // Write header to disk -- the real commit
     install_trans(0); // Now install writes to home locations
     log.lh.n = 0;
@@ -243,7 +245,7 @@ log_write(struct buf *b)
     if (log.lh.block[i] == b->blockno)   // log absorbtion
       break;
   }
-  log.lh.block[i] = b->blockno; // ?
+  log.lh.block[i] = b->blockno;
   if (i == log.lh.n) {  // Add new block to log?
     // we do not find that block in the current log
     // increasing the reference count
@@ -252,4 +254,4 @@ log_write(struct buf *b)
   }
   release(&log.lock);
 }
-
+ // disk hardware can use blockno to find data

@@ -201,14 +201,16 @@ ialloc(uint dev, short type)
   struct dinode *dip;
 
   for(inum = 1; inum < sb.ninodes; inum++){
-    bp = bread(dev, IBLOCK(inum, sb));
+    bp = bread(dev, IBLOCK(inum, sb)); // read the node message from disk to buffer cache
     dip = (struct dinode*)bp->data + inum%IPB;
     if(dip->type == 0){  // a free inode
-      memset(dip, 0, sizeof(*dip));
+      memset(dip, 0, sizeof(*dip)); // allocate memory for this dinode
+      scanning the inode table
       dip->type = type;
       log_write(bp);   // mark it allocated on the disk
       brelse(bp);
-      return iget(dev, inum);
+      return iget(dev, inum); 
+      // iget allocate memory in inode table for this dinode
     }
     brelse(bp);
   }
@@ -248,6 +250,7 @@ iget(uint dev, uint inum)
   acquire(&itable.lock);
 
   // Is the inode already in the table?
+  // scanning the inode table
   empty = 0;
   for(ip = &itable.inode[0]; ip < &itable.inode[NINODE]; ip++){
     if(ip->ref > 0 && ip->dev == dev && ip->inum == inum){
@@ -255,7 +258,7 @@ iget(uint dev, uint inum)
       release(&itable.lock);
       return ip;
     }
-    if(empty == 0 && ip->ref == 0)    // Remember empty slot.
+    if(empty == 0 && ip->ref == 0)    // Remember empty slot. (first)
       empty = ip;
   }
 
@@ -289,6 +292,7 @@ idup(struct inode *ip)
 void
 ilock(struct inode *ip)
 {
+  // usually called after iget
   struct buf *bp;
   struct dinode *dip;
 
@@ -381,6 +385,7 @@ bmap(struct inode *ip, uint bn)
   uint addr, *a;
   struct buf *bp;
 
+  // manage this complexity inside node data structure
   if(bn < NDIRECT){
     if((addr = ip->addrs[bn]) == 0)
       ip->addrs[bn] = addr = balloc(ip->dev);
@@ -390,7 +395,7 @@ bmap(struct inode *ip, uint bn)
 
   if(bn < NINDIRECT){
     // Load indirect block, allocating if necessary.
-    if((addr = ip->addrs[NDIRECT]) == 0)
+    if((addr = ip->addrs[NDIRECT]) == 0) // return the address
       ip->addrs[NDIRECT] = addr = balloc(ip->dev);
     bp = bread(ip->dev, addr);
     a = (uint*)bp->data;
@@ -493,9 +498,11 @@ writei(struct inode *ip, int user_src, uint64 src, uint off, uint n)
   if(off > ip->size || off + n < off)
     return -1;
   if(off + n > MAXFILE*BSIZE)
+    // prevents the panics in the bmap from happening
     return -1;
 
   for(tot=0; tot<n; tot+=m, off+=m, src+=m){
+    // bmap will find the corresponding block no
     bp = bread(ip->dev, bmap(ip, off/BSIZE)); // will call balloc
     m = min(n - tot, BSIZE - off%BSIZE);
     if(either_copyin(bp->data + (off % BSIZE), user_src, src, m) == -1) {
