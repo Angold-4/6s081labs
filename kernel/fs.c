@@ -470,9 +470,10 @@ readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
     n = ip->size - off;
 
   for(tot=0; tot<n; tot+=m, off+=m, dst+=m){
-    bp = bread(ip->dev, bmap(ip, off/BSIZE));
+    bp = bread(ip->dev, bmap(ip, off/BSIZE)); // read data in disk to buffer
     m = min(n - tot, BSIZE - off%BSIZE);
     if(either_copyout(user_dst, dst, bp->data + (off % BSIZE), m) == -1) {
+      // byte by byte
       brelse(bp);
       tot = -1;
       break;
@@ -547,7 +548,9 @@ dirlookup(struct inode *dp, char *name, uint *poff)
     panic("dirlookup not DIR");
 
   for(off = 0; off < dp->size; off += sizeof(de)){
+    // the data inside directory inode (addr) is the address of dirent
     if(readi(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
+      // read data from disk inode to de
       panic("dirlookup read");
     if(de.inum == 0)
       continue;
@@ -555,8 +558,10 @@ dirlookup(struct inode *dp, char *name, uint *poff)
       // entry matches path element
       if(poff)
         *poff = off;
-      inum = de.inum;
+      inum = de.inum; // directory entry
       return iget(dp->dev, inum);
+      // allocate a inode in the inode table
+      // and then return the address of that inode in the table
     }
   }
 
@@ -662,7 +667,7 @@ namex(char *path, int nameiparent, char *name)
       return 0;
     }
     iunlockput(ip);
-    ip = next;
+    ip = next; // next -> iteration
   }
   if(nameiparent){
     iput(ip);

@@ -1,4 +1,6 @@
 struct file {
+  // which is wrapper around either an inode or a pipe,
+  // plus an I/O offset
   enum { FD_NONE, FD_PIPE, FD_INODE, FD_DEVICE } type;
   int ref; // reference count
   char readable;
