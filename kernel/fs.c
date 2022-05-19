@@ -205,7 +205,7 @@ ialloc(uint dev, short type)
     dip = (struct dinode*)bp->data + inum%IPB;
     if(dip->type == 0){  // a free inode
       memset(dip, 0, sizeof(*dip)); // allocate memory for this dinode
-      scanning the inode table
+      // scanning the inode table
       dip->type = type;
       log_write(bp);   // mark it allocated on the disk
       brelse(bp);
