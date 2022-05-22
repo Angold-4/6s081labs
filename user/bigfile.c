@@ -21,6 +21,7 @@ main()
     *(int*)buf = blocks;
     int cc = write(fd, buf, sizeof(buf));
     if(cc <= 0)
+      // stop writing until cannot write anymore
       break;
     blocks++;
     if (blocks % 100 == 0)

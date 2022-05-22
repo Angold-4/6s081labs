@@ -377,7 +377,7 @@ iunlockput(struct inode *ip)
 // are listed in ip->addrs[].  The next NINDIRECT blocks are
 // listed in block ip->addrs[NDIRECT].
 
-// Return the disk block address of the nth block in inode ip.
+// Return the disk block address of the nth block in inode ip. (buffer cache)
 // If there is no such block, bmap allocates one.
 static uint
 bmap(struct inode *ip, uint bn)
@@ -393,6 +393,7 @@ bmap(struct inode *ip, uint bn)
   }
   bn -= NDIRECT;
 
+  // Indirect
   if(bn < NINDIRECT){
     // Load indirect block, allocating if necessary.
     if((addr = ip->addrs[NDIRECT]) == 0) // return the address
@@ -405,6 +406,46 @@ bmap(struct inode *ip, uint bn)
     }
     brelse(bp);
     return addr;
+  }
+
+  bn -= NINDIRECT;
+
+  // Double Indirect
+  uint indirect_idx, final_offset;
+  struct buf *bp2;
+  if (bn < NDOUBLEINDIRECT) {
+    // Load double-indirect block, allocating if necessary
+    if ((addr = ip->addrs[NDIRECT+1]) == 0) { // No.12
+      // if we haven't use that double-indirect block before
+      // allocate one
+      ip->addrs[NDIRECT+1] = addr = balloc(ip->dev);
+    }
+
+    // index in the double-indirect block
+    indirect_idx = bn / NINDIRECT;
+    // offset in that block
+    final_offset = bn % NINDIRECT;
+
+    bp = bread(ip->dev, addr); // get that block
+    a = (uint*) bp->data;
+
+    // Load indirect block, allocating if necessary
+    if ((addr = a[indirect_idx]) == 0) {
+      a[indirect_idx] = addr = balloc(ip->dev); // new block pointer
+      log_write(bp);
+    }
+    brelse(bp);
+    
+    // double-indirect (second layer)
+    bp2 = bread(ip->dev, addr);
+    a = (uint*) bp2->data;
+    if((addr = a[final_offset]) == 0) {
+      a[final_offset] = addr = balloc(ip->dev);
+      log_write(bp2);
+    }
+
+    brelse(bp2);
+    return addr; // the final address in buffer cache
   }
 
   panic("bmap: out of range");
