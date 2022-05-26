@@ -56,6 +56,7 @@ kfree(void *pa)
 
   r = (struct run*)pa;
 
+  // and append it to the linked list
   acquire(&kmem.lock);
   r->next = kmem.freelist;
   kmem.freelist = r;

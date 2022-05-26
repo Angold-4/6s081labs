@@ -25,7 +25,7 @@
 
 struct {
   struct spinlock lock;
-  struct buf buf[NBUF];
+  struct buf buf[NBUF]; // 13
 
   // Linked list of all buffers, through prev/next.
   // Sorted by how recently the buffer was used.
@@ -126,6 +126,7 @@ bwrite(struct buf *b)
   // actual write stuff (to the disk)
   if(!holdingsleep(&b->lock))
     panic("bwrite");
+  // printf("write block: %d \n", b->blockno);
   virtio_disk_rw(b, 1); // write
   // virtio_disk_rw (1): write the modified ram buffer into disk
 }

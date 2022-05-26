@@ -34,7 +34,7 @@
 // and to keep track in memory of logged block# before commit.
 struct logheader {
   int n;
-  int block[LOGSIZE];
+  int block[LOGSIZE]; // 13
 };
 
 struct log {
@@ -71,6 +71,8 @@ install_trans(int recovering)
 {
   int tail;
 
+  // during the recovery, if the log is clear,
+  // which means log.lh.n is zero, and we'll do nothing
   for (tail = 0; tail < log.lh.n; tail++) {
     // #1. log disk -> memory
     struct buf *lbuf = bread(log.dev, log.start+tail+1); // read log block
@@ -200,7 +202,7 @@ write_log(void)
   for (tail = 0; tail < log.lh.n; tail++) {
     // copy each block modified in the transaction from the
     // buffer cache to its slot in the log on the disk
-    struct buf *to = bread(log.dev, log.start+tail+1); // log block
+    struct buf *to = bread(log.dev, log.start+tail+1);     // log block
     struct buf *from = bread(log.dev, log.lh.block[tail]); // cache block
     memmove(to->data, from->data, BSIZE);
     bwrite(to);    // write the log into the disk => for the recovery
@@ -214,7 +216,8 @@ commit()
 {
   if (log.lh.n > 0) {
     write_log();     // Write modified blocks from cache to log (recovery)
-    write_head();    // Write header to disk -- the real commit
+    write_head();    // Write header to disk -- the real commit 
+    // write_head() is atomic
     install_trans(0); // Now install writes to home locations
     log.lh.n = 0;
     write_head();    // Erase the transaction from the log
@@ -245,6 +248,7 @@ log_write(struct buf *b)
     if (log.lh.block[i] == b->blockno)   // log absorbtion
       break;
   }
+  printf("log write block: %d \n", b->blockno);
   log.lh.block[i] = b->blockno;
   if (i == log.lh.n) {  // Add new block to log?
     // we do not find that block in the current log
