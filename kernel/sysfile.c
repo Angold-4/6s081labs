@@ -245,7 +245,7 @@ create(char *path, short type, short major, short minor)
   char name[DIRSIZ];
 
   if((dp = nameiparent(path, name)) == 0) 
-    // Look up and return the inode for a path name.
+    // Look up and return the dir inode for a path name.
     return 0;
 
   ilock(dp);
@@ -259,14 +259,14 @@ create(char *path, short type, short major, short minor)
     return 0;
   }
 
-  if((ip = ialloc(dp->dev, type)) == 0) // allocate a new inode
+  if((ip = ialloc(dp->dev, type)) == 0) // allocate a new inode in the inode table
     panic("create: ialloc");
 
   ilock(ip);
   ip->major = major;
   ip->minor = minor;
   ip->nlink = 1;
-  iupdate(ip); // write this updated inode into disk
+  iupdate(ip); // write this updated (also new allocated) inode into disk
 
   if(type == T_DIR){  // Create . and .. entries.
     dp->nlink++;  // for ".."
@@ -276,10 +276,12 @@ create(char *path, short type, short major, short minor)
       panic("create dots");
   }
 
+  // allocate a entry in that directory
   if(dirlink(dp, name, ip->inum) < 0)
     panic("create: dirlink");
 
-  iunlockput(dp);
+  iunlockput(dp); // since we already write this dir inode into disk
+  // then we just truncate all its data (blocks) in memory
 
   return ip;
 }
@@ -343,6 +345,7 @@ sys_open(void)
   f->writable = (omode & O_WRONLY) || (omode & O_RDWR);
 
   if((omode & O_TRUNC) && ip->type == T_FILE){
+    // itrunc new inode, free all its blocks in the buffer pool
     itrunc(ip);
   }
 

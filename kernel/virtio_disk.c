@@ -203,7 +203,9 @@ alloc3_desc(int *idx)
 void
 virtio_disk_rw(struct buf *b, int write)
 {
+  // in current xv6 implementation, BSIZE == 1024
   uint64 sector = b->blockno * (BSIZE / 512);
+  // write 2 sectors data per time
 
   acquire(&disk.vdisk_lock);
 

@@ -200,12 +200,15 @@ ialloc(uint dev, short type)
   struct buf *bp;
   struct dinode *dip;
 
+  // loops over the inode structures on the disk, one block at a time
+  // looking for one that is marked free. when it finds one, it claims it by
+  // writing the new type to the disk and then returns for the inode table with the tail call to iget
   for(inum = 1; inum < sb.ninodes; inum++){
     bp = bread(dev, IBLOCK(inum, sb)); // read the node message from disk to buffer cache
+    // # inum inode from disk
     dip = (struct dinode*)bp->data + inum%IPB;
     if(dip->type == 0){  // a free inode
       memset(dip, 0, sizeof(*dip)); // allocate memory for this dinode
-      // scanning the inode table
       dip->type = type;
       log_write(bp);   // mark it allocated on the disk
       brelse(bp);
@@ -276,7 +279,7 @@ iget(uint dev, uint inum)
   return ip;
 }
 
-// Increment reference count for ip.
+// Increment the reference count for ip.
 // Returns ip to enable ip = idup(ip1) idiom.
 struct inode*
 idup(struct inode *ip)
@@ -350,8 +353,9 @@ iput(struct inode *ip)
 
     itrunc(ip);
     ip->type = 0;
+
     iupdate(ip);
-    ip->valid = 0;
+    ip->valid = 0; // set as valid
 
     releasesleep(&ip->lock);
 
@@ -411,6 +415,7 @@ bmap(struct inode *ip, uint bn)
   bn -= NINDIRECT;
 
   // Double Indirect
+  // find the location of that double reference
   uint indirect_idx, final_offset;
   struct buf *bp2;
   if (bn < NDOUBLEINDIRECT) {
@@ -452,6 +457,7 @@ bmap(struct inode *ip, uint bn)
 }
 
 // Truncate inode (discard contents).
+// free all its disk blocks in memory
 // Caller must hold ip->lock.
 void
 itrunc(struct inode *ip)
@@ -467,7 +473,7 @@ itrunc(struct inode *ip)
     }
   }
 
-  if(ip->addrs[NDIRECT]){
+  if(ip->addrs[NDIRECT]){ // indirect
     bp = bread(ip->dev, ip->addrs[NDIRECT]);
     a = (uint*)bp->data;
     for(j = 0; j < NINDIRECT; j++){
@@ -495,7 +501,8 @@ stati(struct inode *ip, struct stat *st)
   st->size = ip->size;
 }
 
-// Read data from inode.
+// Read data block from inode. (specifiy by off)
+// the off is the offset (byte) in that file
 // Caller must hold ip->lock.
 // If user_dst==1, then dst is a user virtual address;
 // otherwise, dst is a kernel address.
@@ -513,8 +520,8 @@ readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
   for(tot=0; tot<n; tot+=m, off+=m, dst+=m){
     bp = bread(ip->dev, bmap(ip, off/BSIZE)); // read data in disk to buffer
     m = min(n - tot, BSIZE - off%BSIZE);
+    // off % BSIZE -> new offset of that block
     if(either_copyout(user_dst, dst, bp->data + (off % BSIZE), m) == -1) {
-      // byte by byte
       brelse(bp);
       tot = -1;
       break;
@@ -546,16 +553,15 @@ writei(struct inode *ip, int user_src, uint64 src, uint off, uint n)
   for(tot=0; tot<n; tot+=m, off+=m, src+=m){
     // bmap will find the corresponding block no
     bp = bread(ip->dev, bmap(ip, off/BSIZE)); // will call balloc
-    m = min(n - tot, BSIZE - off%BSIZE);
+    m = min(n - tot, BSIZE - off%BSIZE); // either a block or the remainder
     if(either_copyin(bp->data + (off % BSIZE), user_src, src, m) == -1) {
       // copy user / kernel space data into a free buffer section in the 
       // kernel space, then pass the buffer pointer (bp) into log_write
       brelse(bp);
       break;
     }
-    // the log_write will 
 
-    log_write(bp); // only care one buffer (BSIZE)
+    log_write(bp);
 
     brelse(bp);
   }
@@ -570,6 +576,7 @@ writei(struct inode *ip, int user_src, uint64 src, uint off, uint n)
 
   return tot;
 }
+
 
 // Directories
 
@@ -608,6 +615,7 @@ dirlookup(struct inode *dp, char *name, uint *poff)
     }
   }
 
+  // not found, return zero
   return 0;
 }
 
@@ -625,8 +633,9 @@ dirlink(struct inode *dp, char *name, uint inum)
     return -1;
   }
 
-  // Look for an empty dirent.
+  // Look for an empty dirent in the data block
   for(off = 0; off < dp->size; off += sizeof(de)){
+    // look the de of offset
     if(readi(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
       panic("dirlink read");
     if(de.inum == 0)
@@ -634,7 +643,9 @@ dirlink(struct inode *dp, char *name, uint inum)
   }
 
   strncpy(de.name, name, DIRSIZ);
-  de.inum = inum;
+  de.inum = inum; // inode number
+  // write to that directory inode
+  
   if(writei(dp, 0, (uint64)&de, off, sizeof(de)) != sizeof(de))
     panic("dirlink");
 
