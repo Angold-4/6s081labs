@@ -556,6 +556,7 @@ writei(struct inode *ip, int user_src, uint64 src, uint off, uint n)
     // the log_write will 
 
     log_write(bp); // only care one buffer (BSIZE)
+
     brelse(bp);
   }
 
