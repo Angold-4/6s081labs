@@ -205,8 +205,8 @@ ialloc(uint dev, short type)
   // writing the new type to the disk and then returns for the inode table with the tail call to iget
   for(inum = 1; inum < sb.ninodes; inum++){
     bp = bread(dev, IBLOCK(inum, sb)); // read the node message from disk to buffer cache
-    // # inum inode from disk
-    dip = (struct dinode*)bp->data + inum%IPB;
+    dip = (struct dinode*)bp->data + inum%IPB; // IPB -> Inode Per Disk
+    // inum % IPB = the offset of that inode block
     if(dip->type == 0){  // a free inode
       memset(dip, 0, sizeof(*dip)); // allocate memory for this dinode
       dip->type = type;
@@ -305,6 +305,8 @@ ilock(struct inode *ip)
   acquiresleep(&ip->lock);
 
   if(ip->valid == 0){
+    // if first time
+    // key: read the dinode -> inode in memory
     bp = bread(ip->dev, IBLOCK(ip->inum, sb));
     dip = (struct dinode*)bp->data + ip->inum%IPB;
     ip->type = dip->type;
@@ -553,7 +555,9 @@ writei(struct inode *ip, int user_src, uint64 src, uint off, uint n)
   for(tot=0; tot<n; tot+=m, off+=m, src+=m){
     // bmap will find the corresponding block no
     bp = bread(ip->dev, bmap(ip, off/BSIZE)); // will call balloc
+
     m = min(n - tot, BSIZE - off%BSIZE); // either a block or the remainder
+
     if(either_copyin(bp->data + (off % BSIZE), user_src, src, m) == -1) {
       // copy user / kernel space data into a free buffer section in the 
       // kernel space, then pass the buffer pointer (bp) into log_write
@@ -706,7 +710,7 @@ namex(char *path, int nameiparent, char *name)
     ip = idup(myproc()->cwd);
 
   while((path = skipelem(path, name)) != 0){
-    ilock(ip);
+    ilock(ip); // read the indeo from disk
     if(ip->type != T_DIR){
       iunlockput(ip);
       return 0;
