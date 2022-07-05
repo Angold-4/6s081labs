@@ -484,3 +484,18 @@ sys_pipe(void)
   }
   return 0;
 }
+
+uint64
+sys_mmap(void) {
+  uint64 addr;
+  int length, prot, flags, fd, i;
+  struct proc *p;
+
+  if (argint(1, &length) < 0 || argint(2, &prot) < 0 || 
+      argint(3, &flags) < 0 ||  argint(4, &fd < 0)) 
+    return -1;
+
+  p = myproc();
+
+  struct file *mapfile = p->ofile[fd];
+}
