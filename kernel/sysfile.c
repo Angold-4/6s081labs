@@ -492,10 +492,81 @@ sys_mmap(void) {
   struct proc *p;
 
   if (argint(1, &length) < 0 || argint(2, &prot) < 0 || 
-      argint(3, &flags) < 0 ||  argint(4, &fd < 0)) 
+      argint(3, &flags) < 0 ||  argint(4, &fd) < 0))
     return -1;
 
   p = myproc();
 
-  struct file *mapfile = p->ofile[fd];
+  struct file *mapfile = p->ofile[fd]; // the file you wanna map
+
+  if ((!mapfile->writable) && (prot&&PROT_WRITE) && (!(flags&MAP_PRIVATE)))
+    return -1;
+
+  for (i = 0; i < NVMA; i++) {
+    // allocate vma struct
+    if (p->vmas[i].valid == 0) {
+      p->vmas[i].valid = 1;
+      p->vmas[i].addr = addr = p->sz; // size of the process memory (current maximum)
+      p->vmas[i].length = length;
+      p->vmas[i].prot = prot;
+      p->vmas[i].flags = flags;
+      p->vmas[i].mapfile = mapfile;
+      filedup(p->ofile[fd]); // increase the ref of file
+      break;
+    }
+  }
+
+  if (i == NVMA) {
+    // no free vma slot
+    return -1;
+  }
+
+  p->sz += length; // lazy mapping
+  return addr;
+}
+
+
+uint64
+sys_munmap(void) {
+  uint64 addr;
+  int length, i;
+
+  struct proc* p;
+
+  if (argaddr(0, &addr) < 0 || argint(1, &length) < 0) {
+    return -1;
+  }
+
+  p = myproc();
+
+  for (i = 0; i < NVMA; i++) {
+    if (p->vmas[i].valid == 1) {
+      if (p->vmas[i].addr <= addr && (p->vmas[i].addr + p->vmas[i].length) > addr)
+	break;
+    }
+  }
+
+  // not found
+  if (i == NVMA) {
+    return -1;
+  }
+
+  struct vma *vmap = &p->vmas[i];
+
+  if (vmap->flags & MAP_SHARED) {
+    filewrite(vmap->mapfile, addr, length);
+    // write length bytes from addr of mapfile
+  }
+
+  if (vmap->addr == addr && vmap->length == length) {
+    // unmap the whole area
+    uvmunmap(p->pagetable, addr, length/PGSIZE, 1); // length/PGSIZE -> # of pages
+    vmap->addr += length;
+    vmap->length -= length;
+  } else if (vmap->addr + vmap->length == addr + length) {
+    uvmunmap(p->pagetable, addr, length/PGSIZE, 1);
+    vmap->length -= length;
+  }
+
+  return 0;
 }

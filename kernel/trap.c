@@ -5,6 +5,10 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "sleeplock.h"
+#include "fs.h"
+#include "file.h"
+#include "fcntl.h"
 
 struct spinlock tickslock;
 uint ticks;
@@ -67,6 +71,67 @@ usertrap(void)
     syscall();
   } else if((which_dev = devintr()) != 0){
     // ok
+  } else if (r_scause() == 13 || r_scause() == 15) {
+    // page fault (Lazy allocation)
+    // just like lazy lab
+    uint64 va = r_stval();
+    // r_stval)() returns the RISC-V stval register.
+    // which contains the virtual address of corresponding page fault.
+
+    if (va >= p->sz || va < p->trapframe->sp) {
+      // page fault on a virtual memory address higher than any allocated with sbrk()
+      // or lower than the stack. In xv6, heap is higher than stack
+      p->killed = 1;
+    } else {
+      int i;
+      // check if this pagefault is in one virtual memory area
+      for (i = 0; i < NVMA; i++) {
+	if (p->vmas[i].valid) {
+	  // addr == offset
+	  // for users, they just know mmap() returns a pointer, they just need to get the content through
+	  // offset of that pointer
+	  if (p->vmas[i].addr <= va && (p->vmas[i].addr + p->vmas[i].length) > va)
+	    break;
+	}
+      }
+
+      if (i == NVMA) {
+	// not in any vma
+	// here we just lazy allocate mem in the vma area
+	p->killed = 1;
+      } else {
+	  uint64 ka = (uint64) kalloc();
+	  if (ka == 0)
+	    p->killed = 1;
+	  else {
+	  memset((void *) ka, 0, PGSIZE); // ka stands for a free page
+	  va = PGROUNDDOWN(va);
+	  ilock(p->vmas[i].mapfile->ip); // inode pointer
+	  readi(p->vmas[i].mapfile->ip, 0, ka, va - p->vmas[i].addr, PGSIZE);
+	  // read a page from file to ka
+	  // p->vmas[i] stands for the current offset of process memory
+	  // va - p->vmas[i].addr stands for offset
+	  // readi(struct inode *ip, int user_dst, uint64 dst, uint off, uint n)
+	  
+	  iunlock(p->vmas[i].mapfile->ip);
+
+	  uint64 pm = PTE_U; // set the privilege
+	  if (p->vmas[i].prot & PROT_READ) {
+	    pm |= PTE_R;
+	  }
+
+	  if (p->vmas[i].prot & PROT_WRITE) {
+	    pm |= PTE_W;
+	  }
+
+	  if (mappages(p->pagetable, va, PGSIZE, ka, pm) != 0) {
+	    // should be recorded in the user's page table
+	    kfree((void *) ka);
+	    p->killed = 1;
+	  }
+	}
+      }
+    }
   } else {
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
